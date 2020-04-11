@@ -6,9 +6,12 @@ import (
 	"image"
 	"image/draw"
 	"image/png"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
+
 	"github.com/gorilla/mux"
 )
 
@@ -130,8 +133,31 @@ func Generate(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func Serve(w http.ResponseWriter, r *http.Request) {
+	fileLoc := fmt.Sprintf("./build%s", r.RequestURI)
+	content, err := ioutil.ReadFile(fileLoc)
+	if err != nil {
+		fmt.Printf("file could not be read, err: %s", err.Error())
+		w.WriteHeader(404)
+		return
+	}
+	w.Write(content)
+}
+
+func redirectTLS(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "https://funemoji.club"+r.RequestURI, http.StatusMovedPermanently)
+}
+
 func main() {
-	r := mux.NewRouter()
-	r.HandleFunc("/generate", Generate)
-	http.ListenAndServe(":8000", r)
+	router := mux.NewRouter()
+	router.HandleFunc("/generate", Generate)
+	router.HandleFunc("/", Serve)
+	go func() {
+		redirectRouter := mux.NewRouter()
+		redirectRouter.HandleFunc("/", redirectTLS)
+		err := http.ListenAndServe(":80", redirectRouter)
+		fmt.Printf("%s | couldnt start server on port 80, err: %s\n", time.Now(), err.Error())
+	}()
+	err := http.ListenAndServeTLS(":443", "/etc/letsencrypt/live/funemoji.club/fullchain.pem", "/etc/letsencrypt/live/funemoji.club/privkey.pem", router)
+	fmt.Printf("%s | couldnt start server on port 443, err: %s\n", time.Now(), err.Error())
 }
