@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -37,20 +38,20 @@ func Generate(w http.ResponseWriter, r *http.Request) {
 	percentStr := r.URL.Query().Get("percent")
 
 	if top == "" || bottom == "" || percentStr == "" {
-		fmt.Print("top, bottom, or percent missing cannot proceed")
+		fmt.Print("top, bottom, or percent missing cannot proceed\n")
 		w.WriteHeader(400)
 		return
 	}
 
 	percent, err := strconv.ParseInt(percentStr, 10, 32)
 	if err != nil {
-		fmt.Printf("percent %s was not parseable", percentStr)
+		fmt.Printf("percent %s was not parseable\n", percentStr)
 		w.WriteHeader(400)
 		return
 	}
 
 	if percent < 0 || percent > 100 {
-		fmt.Printf("percent outside of allowed bounds: %d", percent)
+		fmt.Printf("percent outside of allowed bounds: %d\n", percent)
 		w.WriteHeader(400)
 		return
 	}
@@ -64,7 +65,7 @@ func Generate(w http.ResponseWriter, r *http.Request) {
 
 		// by default writes 200 ok header
 		if _, err := w.Write(buf.Bytes()); err != nil {
-			fmt.Print("could not write image")
+			fmt.Print("could not write image\n")
 			w.WriteHeader(500)
 		}
 		return
@@ -72,28 +73,28 @@ func Generate(w http.ResponseWriter, r *http.Request) {
 
 	topImageFile, err := os.Open(fmt.Sprintf("./assets/%s.png", top))
 	if err != nil {
-		fmt.Printf("first emoji %s.png not found", top)
+		fmt.Printf("first emoji %s.png not found\n", top)
 		w.WriteHeader(500)
 		return
 	}
 
 	topImage, err := png.Decode(topImageFile)
 	if err != nil {
-		fmt.Print("could not decode first image")
+		fmt.Print("could not decode first image\n")
 		w.WriteHeader(500)
 		return
 	}
 
 	bottomImageFile, err := os.Open(fmt.Sprintf("./assets/%s.png", bottom))
 	if err != nil {
-		fmt.Printf("second emoji %s.png not found", bottom)
+		fmt.Printf("second emoji %s.png not found\n", bottom)
 		w.WriteHeader(500)
 		return
 	}
 
 	bottomImage, err := png.Decode(bottomImageFile)
 	if err != nil {
-		fmt.Print("could not decode second image")
+		fmt.Print("could not decode second image\n")
 		w.WriteHeader(500)
 		return
 	}
@@ -112,7 +113,7 @@ func Generate(w http.ResponseWriter, r *http.Request) {
 
 	buf = bytes.NewBuffer(nil)
 	if err := png.Encode(buf, rgba); err != nil {
-		fmt.Print("could not encode output image")
+		fmt.Print("could not encode output image\n")
 		w.WriteHeader(500)
 		return
 	}
@@ -127,19 +128,39 @@ func Generate(w http.ResponseWriter, r *http.Request) {
 
 	// by default writes 200 ok header
 	if _, err := w.Write(buf.Bytes()); err != nil {
-		fmt.Print("could not write image")
+		fmt.Print("could not write image\n")
 		w.WriteHeader(500)
 		return
 	}
 }
 
 func Serve(w http.ResponseWriter, r *http.Request) {
-	fileLoc := fmt.Sprintf("./build%s", r.RequestURI)
+	fileLoc := fmt.Sprintf("./build/index.html")
+	if r.RequestURI != "/" {
+		fileLoc = fmt.Sprintf("./build%s", r.RequestURI)
+	}
 	content, err := ioutil.ReadFile(fileLoc)
 	if err != nil {
-		fmt.Printf("file could not be read, err: %s", err.Error())
+		fmt.Printf("file could not be read, err: %s\n", err.Error())
 		w.WriteHeader(404)
 		return
+	}
+	if strings.HasSuffix(fileLoc, ".css") {
+		w.Header().Set("Content-Type", "text/css")
+	} else if strings.HasSuffix(fileLoc, ".html") {
+		w.Header().Set("Content-Type", "text/html")
+	} else if strings.HasSuffix(fileLoc, ".js") {
+		w.Header().Set("Content-Type", "text/javascript")
+	} else if strings.HasSuffix(fileLoc, ".ico") {
+		w.Header().Set("Content-Type", "image/x-icon")
+	} else if strings.HasSuffix(fileLoc, ".json") {
+		w.Header().Set("Content-Type", "application/json")
+	} else if strings.HasSuffix(fileLoc, ".map") {
+		w.Header().Set("Content-Type", "application/json")
+	} else if strings.HasSuffix(fileLoc, ".png") {
+		w.Header().Set("Content-Type", "image/png")
+	} else {
+		w.Header().Set("Content-Type", "text/plain")
 	}
 	w.Write(content)
 }
@@ -151,7 +172,7 @@ func redirectTLS(w http.ResponseWriter, r *http.Request) {
 func main() {
 	router := mux.NewRouter()
 	router.HandleFunc("/generate", Generate)
-	router.HandleFunc("/", Serve)
+	router.PathPrefix("/").HandlerFunc(Serve)
 	go func() {
 		redirectRouter := mux.NewRouter()
 		redirectRouter.HandleFunc("/", redirectTLS)
